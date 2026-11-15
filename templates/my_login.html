@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Вход в систему (OAuth 2.1 Server)</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f6f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 320px; }
+        h2 { margin-top: 0; color: #333; font-size: 20px; }
+        .info { background: #eef2f7; padding: 10px; border-radius: 4px; font-size: 13px; margin-bottom: 15px; color: #555; }
+        .error { background: #ffe6e6; color: #cc0000; padding: 10px; border-radius: 4px; font-size: 13px; margin-bottom: 15px; }
+        input[type="text"], input[type="password"] { width: 100%; padding: 10px; margin: 8px 0 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #0066ff; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+        button:hover { background: #0052cc; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Авторизация</h2>
+        
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <div class="info">
+            Приложение <b>{{ client_id }}</b> запрашивает доступ:<br>
+            Права (scope): <b>{{ scope }}</b>
+        </div>
+
+        <form method="post" action="/login">
+            <label>Логин (alice или bob):</label>
+            <input type="text" name="username" required placeholder="alice">
+            
+            <label>Пароль (123 или 456):</label>
+            <input type="password" name="password" required placeholder="123">
+            
+            <!-- Jinja2 автоматически экранирует значения в атрибутах value -->
+            <input type="hidden" name="client_id" value="{{ client_id }}">
+            <input type="hidden" name="redirect_uri" value="{{ redirect_uri }}">
+            <input type="hidden" name="scope" value="{{ scope }}">
+            <input type="hidden" name="state" value="{{ state }}">
+            <input type="hidden" name="code_challenge" value="{{ code_challenge }}">
+            <input type="hidden" name="code_challenge_method" value="{{ code_challenge_method }}">
+            
+            <button type="submit">Войти и разрешить доступ</button>
+        </form>
+    </div>
+</body>
+</html>
