@@ -31,5 +31,45 @@ http://localhost:8000/authorize?response_type=code&client_id=admin&redirect_uri=
 В продакшене используют либо готовые Identity Provider (например, Keycloak), либо проверенные криптографические библиотеки уровня Authlib.
 ## 2.1. Установка зависимостей
 ```
-pip install fastapi uvicorn authlib sqlalchemy jinja2 python-multipart
+pip install fastapi uvicorn authlib sqlalchemy jinja2 python-multipart psycopg[binary]
 ```
+## 2.2 Как запустить и проверить
+1. Откройте терминал в корневой папке oauth.
+2. Запустите сборку и старт одной командой:
+```
+docker compose up --build
+```
+3. Сначала стартует bank_auth_db, затем срабатывает healthcheck, и следом запускается bank_auth_server (running on http://0.0.0).
+4. Откройте в браузере форму входа, чтобы убедиться, что всё работает:
+```
+http://localhost:8000/authorize?response_type=code&client_id=my_client_app&redirect_uri=http://localhost:8002/callback&scope=read
+```
+Связка «Сервер авторизации + База данных» готова и упакована в Docker.
+
+## 3. Клиентское ПО
+1. Запустите все 3 контейнера из корневой папки:
+```
+docker compose up --build
+```
+2. Откройте в браузере клиентское приложение: 
+http://localhost:8002.
+3. Нажмите кнопку «Войти через Банк ID (OAuth 2.1)» — вас перекинет на порт 8000 (сервер авторизации).
+4. Введите alice / 123 — вас вернет обратно на порт 8002, и прямо на экране отобразится ваш реальный `Access Token`, выданный библиотекой Authlib из базы PostgreSQL!
+
+## 4. Запустить фаззинг по серверу ресурсов
+1. Поднимите все контейнеры: 
+```
+docker compose up --build.
+```
+2. Получите свой JWT-токен через браузер (http://localhost:8002 -> Войти через Банк ID -> скопируйте длинный `Access Token` с экрана).
+3. Установите фаззер локально:
+```
+pip install schemathesis
+```
+и запустите автоматический поиск логических багов одной командой, подставив скопированный токен:
+```
+schemathesis run http://localhost:8001/openapi.json \
+  --header "Authorization: Bearer ВАШ_JWT_ТОКЕН" \
+  --workers 5
+```
+Фаззер сам прочитает `/openapi.json` сервера ресурсов, найдет ручку POST `/transfer`, начнет подставлять туда -100.0, 0, 9999999 в 5 параллельных потоков и через несколько секунд выдаст вам готовый отчет о найденных уязвимостях!

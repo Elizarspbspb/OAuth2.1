@@ -2,66 +2,62 @@ import time
 import hashlib
 from fastapi import FastAPI, Request, Response, Form
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.orm import declarative_base, sessionmaker
-
 from authlib.oauth2 import AuthorizationServer
 from authlib.oauth2.rfc6749 import grants
 from authlib.oauth2.rfc7636 import CodeChallenge
-from authlib.integrations.sqla_oauth2 import (
-    OAuth2ClientMixin,
-    OAuth2AuthorizationCodeMixin,
-    OAuth2TokenMixin,
-)
 
-# 1. ПОДКЛЮЧЕНИЕ К SQL БАЗЕ (Для Docker меняем на postgresql://user:pass@db:5432/bank_auth)
-DATABASE_URL = "sqlite:///./bank_oauth.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+from database import engine, SessionLocal, Base
+from models import User, OAuth2Client, OAuth2AuthorizationCode, OAuth2Token
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from authlib.jose import JsonWebKey
+from authlib.oauth2.rfc6750 import BearerTokenGenerator
+import jwt  # Убедитесь, что установлен pyjwt или используем authlib.jose
 
-# 2. МОДЕЛИ БАЗЫ ДАННЫХ
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True)
-    username = Column(String(50), unique=True, nullable=False)
-    password_hash = Column(String(128), nullable=False)
-
-
-class OAuth2Client(Base, OAuth2ClientMixin):
-    __tablename__ = "oauth2_clients"
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer)
-
-    # УЯЗВИМОСТЬ БИЗНЕС-ЛОГИКИ №1 (Небезопасная валидация redirect_uri):
-    # В банке часто бывают разные поддомены или пути для возврата. Разработчик
-    # переопределил строгую проверку Authlib на проверку через startswith().
-    # Это позволяет провести Open Redirect атаку (например: http://localhost:8002/://evil.com)
-    def check_redirect_uri(self, redirect_uri):
-        allowed = self.get_default_redirect_uri()
-        return redirect_uri.startswith(allowed)
-
-
-class OAuth2AuthorizationCode(Base, OAuth2AuthorizationCodeMixin):
-    __tablename__ = "oauth2_codes"
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer)
-
-
-class OAuth2Token(Base, OAuth2TokenMixin):
-    __tablename__ = "oauth2_tokens"
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer)
-
-
+# Создаем таблицы в контейнере PostgreSQL, если их еще нет
 Base.metadata.create_all(bind=engine)
 
+# Генерируем пару ключей RSA (Приватный для подписи, Публичный для Сервера ресурсов)
+private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+PRIVATE_PEM = private_key.private_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PrivateFormat.PKCS8,
+    encryption_algorithm=serialization.NoEncryption()
+)
+PUBLIC_PEM = private_key.public_key().public_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PublicFormat.SubjectPublicKeyInfo
+)
 
-# 3. НАСТРОЙКА ГРАНТА OAUTH 2.1
+# Формируем стандартный JWKS (JSON Web Key Set) для публикации
+jwk = JsonWebKey.import_key(PUBLIC_PEM, {"kty": "RSA", "use": "sig", "kid": "bank-key-1", "alg": "RS256"})
+JWKS_DATA = {"keys": [jwk.as_dict()]}
+
+# Учим Authlib выдавать подписанный JWT вместо случайной строки
+class JWTBearerTokenGenerator(BearerTokenGenerator):
+    def __init__(self, secret_key):
+        super().__init__(self._generate_jwt)
+        self.secret_key = secret_key
+
+    def _generate_jwt(self, client, grant_type, user, scope):
+        from authlib.jose import jwt as authlib_jwt
+        header = {"alg": "RS256", "kid": "bank-key-1"}
+        payload = {
+            "iss": "http://auth_server:8000",
+            "sub": str(user.id),
+            "username": user.username,
+            "scope": scope,
+            "iat": int(time.time()),
+            "exp": int(time.time()) + 3600,
+        }
+        return authlib_jwt.encode(header, payload, self.secret_key).decode("utf-8")
+
+# Переопределение методов в базовых классах AUTHLIB
+# AuthorizationCodeGrant - работа с одноразовыми кодами
 class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
     TOKEN_ENDPOINT_AUTH_METHODS = ["client_secret_basic", "client_secret_post", "none"]
-
+    # Сохранение кода в PostgreSQL
     def save_authorization_code(self, code, request):
         db = SessionLocal()
         auth_code = OAuth2AuthorizationCode(
@@ -77,34 +73,34 @@ class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
         db.commit()
         db.close()
 
+    # Поиск кода
     def query_authorization_code(self, code, client):
         db = SessionLocal()
         item = db.query(OAuth2AuthorizationCode).filter_by(
             code=code, client_id=client.client_id
         ).first()
-        if item and not item.is_expired():
-            return item
-        return None
+        return item if (item and not item.is_expired()) else None
 
+    # Удаление кода
     def delete_authorization_code(self, authorization_code):
         db = SessionLocal()
-        # В SQLAlchemy нужно заново привязать объект к текущей сессии перед удалением
         obj = db.merge(authorization_code)
         db.delete(obj)
         db.commit()
         db.close()
 
+    # Привязка к пользователю
     def authenticate_user(self, authorization_code):
         db = SessionLocal()
         return db.query(User).filter_by(id=authorization_code.user_id).first()
 
-
-# 4. АДАПТЕР AUTHLIB ДЛЯ FASTAPI
+# FastAPIAuthorizationServer - главный движок сервера авторизации
 class FastAPIAuthorizationServer(AuthorizationServer):
+    # Проверка приложения
     def query_client(self, client_id):
         db = SessionLocal()
         return db.query(OAuth2Client).filter_by(client_id=client_id).first()
-
+    # Сохранение боевого токена
     def save_token(self, token_data, request):
         db = SessionLocal()
         token = OAuth2Token(
@@ -115,7 +111,8 @@ class FastAPIAuthorizationServer(AuthorizationServer):
         db.add(token)
         db.commit()
         db.close()
-
+        
+    # Переводчик «Вход»
     def create_oauth2_request(self, request: Request):
         return self._create_oauth2_request_from_data(
             method=request.method,
@@ -123,19 +120,24 @@ class FastAPIAuthorizationServer(AuthorizationServer):
             headers=dict(request.headers),
             body=getattr(request.state, "body_dict", {})
         )
-
+        
+    # Переводчик «Выход»
     def handle_response(self, status_code, body, headers):
         return Response(content=body, status_code=status_code, headers=dict(headers))
 
 
 server = FastAPIAuthorizationServer()
-
-# УЯЗВИМОСТЬ БИЗНЕС-ЛОГИКИ №2 (Ослабление стандарта OAuth 2.1):
-# Включена поддержка PKCE, но флаг required=False позволяет клиентам
-# обходить защиту PKCE, если они просто не передадут code_challenge.
+server.register_token_generator("default", JWTBearerTokenGenerator(PRIVATE_PEM))
+# УЯЗВИМОСТЬ БИЗНЕС-ЛОГИКИ: PKCE сделан необязательным (required=False)
 server.register_grant(AuthorizationCodeGrant, [CodeChallenge(required=False)])
 
-app = FastAPI(title="Bank OAuth 2.1 Server (Authlib)")
+# Публикуем публичный ключ по стандарту OAuth / OIDC
+@app.get("/.well-known/jwks.json")
+def get_jwks():
+    """Сервер ресурсов будет забирать отсюда публичный ключ для проверки JWT."""
+    return JWKS_DATA
+    
+app = FastAPI(title="Bank OAuth 2.1 Auth Server")
 templates = Jinja2Templates(directory="templates")
 
 
@@ -143,9 +145,9 @@ def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
 
+# --- ИНИЦИАЛИЗАЦИЯ ТЕСТОВЫХ ДАННЫХ В POSTGRESQL ---
 @app.on_event("startup")
-def init_db():
-    """Заполняем базу тестовыми пользователями и клиентом при первом запуске."""
+def seed_database():
     db = SessionLocal()
     if not db.query(User).filter_by(username="alice").first():
         db.add(User(id=42, username="alice", password_hash=hash_password("123")))
@@ -170,22 +172,15 @@ def init_db():
     db.close()
 
 
+# --- МАРШРУТЫ (ENDPOINTS) ---
 @app.middleware("http")
 async def parse_form_body(request: Request, call_next):
-    if request.method == "POST":
-        form = await request.form()
-        request.state.body_dict = dict(form)
-    else:
-        request.state.body_dict = {}
+    request.state.body_dict = dict(await request.form()) if request.method == "POST" else {}
     return await call_next(request)
 
 
 @app.get("/authorize")
 def authorize_get(request: Request):
-    """
-    Шаг 1: Пользователь приходит с клиента.
-    Authlib сам проверяет client_id, response_type и redirect_uri ДО показа формы!
-    """
     try:
         grant = server.get_consent_grant(request, end_user=None)
     except Exception as error:
@@ -203,15 +198,7 @@ def authorize_get(request: Request):
 
 
 @app.post("/authorize")
-def authorize_post(
-    request: Request,
-    username: str = Form(...),
-    password: str = Form(...)
-):
-    """
-    Шаг 2: Пользователь отправил логин и пароль.
-    Проверяем их по SQL-базе и просим Authlib выдать authorization_code.
-    """
+def authorize_post(request: Request, username: str = Form(...), password: str = Form(...)):
     db = SessionLocal()
     user = db.query(User).filter_by(username=username).first()
 
@@ -228,8 +215,6 @@ def authorize_post(
             }
         )
 
-    # Передаем найденного пользователя в Authlib — библиотека сама сгенерирует code
-    # и сделает безопасный редирект на redirect_uri
     response = server.create_authorization_response(request, grant_user=user)
     db.close()
     return response
@@ -237,5 +222,4 @@ def authorize_post(
 
 @app.post("/token")
 def issue_token(request: Request):
-    """Шаг 3: Обмен code на access_token через движок Authlib."""
     return server.create_token_response(request)

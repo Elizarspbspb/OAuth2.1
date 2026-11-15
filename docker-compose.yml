@@ -1,0 +1,58 @@
+services:
+  # КОНТЕЙНЕР 1: База данных PostgreSQL
+  auth_db:
+    image: postgres:16-alpine
+    container_name: bank_auth_db
+    environment:
+      POSTGRES_USER: bank_admin
+      POSTGRES_PASSWORD: secret_pass
+      POSTGRES_DB: auth_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bank_admin -d auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # КОНТЕЙНЕР 2: Сервер авторизации OAuth 2.1
+  auth_server:
+    build: ./auth_server
+    container_name: bank_auth_server
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://bank_admin:secret_pass@auth_db:5432/auth_db
+    depends_on:
+      auth_db:
+        condition: service_healthy
+
+  # КОНТЕЙНЕР 3: Клиентское ПО
+  client_app:
+    build: ./client_app
+    container_name: bank_client_app
+    ports:
+      - "8002:8002"
+    environment:
+      AUTH_PUBLIC_URL: http://localhost:8000
+      AUTH_INTERNAL_URL: http://auth_server:8000
+    depends_on:
+      - auth_server
+      
+  # КОНТЕЙНЕР 4: Сервер ресурсов (Банк API)
+  resource_server:
+    build: ./resource_server
+    container_name: bank_resource_server
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql+psycopg://bank_admin:secret_pass@auth_db:5432/auth_db
+      JWKS_URL: http://auth_server:8000/.well-known/jwks.json
+    depends_on:
+      auth_server:
+        condition: service_started
+
+volumes:
+  auth_pg_data:
