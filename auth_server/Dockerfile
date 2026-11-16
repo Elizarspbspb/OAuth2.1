@@ -8,11 +8,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копируем весь остальной код (main.py, models.py, database.py и папку templates)
+# Копируем весь остальной код (auth_server.py, models.py, database.py и папку templates)
 COPY . .
 
 # Открываем порт 8000
 EXPOSE 8000
 
 # Команда запуска сервера
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "auth_server:app", "--host", "0.0.0.0", "--port", "8000"]

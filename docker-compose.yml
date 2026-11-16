@@ -2,7 +2,7 @@ services:
   # КОНТЕЙНЕР 1: База данных PostgreSQL
   auth_db:
     image: postgres:16-alpine
-    container_name: bank_auth_db
+    container_name: auth_db
     environment:
       POSTGRES_USER: bank_admin
       POSTGRES_PASSWORD: secret_pass
@@ -20,7 +20,7 @@ services:
   # КОНТЕЙНЕР 2: Сервер авторизации OAuth 2.1
   auth_server:
     build: ./auth_server
-    container_name: bank_auth_server
+    container_name: auth_server
     ports:
       - "8000:8000"
     environment:
@@ -32,7 +32,7 @@ services:
   # КОНТЕЙНЕР 3: Клиентское ПО
   client_app:
     build: ./client_app
-    container_name: bank_client_app
+    container_name: client_app
     ports:
       - "8002:8002"
     environment:
@@ -44,7 +44,7 @@ services:
   # КОНТЕЙНЕР 4: Сервер ресурсов (Банк API)
   resource_server:
     build: ./resource_server
-    container_name: bank_resource_server
+    container_name: resource_server
     ports:
       - "8001:8001"
     environment:

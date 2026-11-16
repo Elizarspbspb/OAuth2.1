@@ -40,16 +40,19 @@ def home(request: Request):
 def start_oauth():
     """Шаг 1: Пользователь нажал кнопку 'Войти'. Готовим PKCE и редиректим в Банк."""
     state = secrets.token_urlsafe(16)
-    verifier, challenge = generate_pkce()
+    print("state = ", state)
+    code_verifier, challenge = generate_pkce()
+    print("code_verifier = ", code_verifier)
+    print("challenge = ", challenge)
 
-    # Запоминаем verifier, чтобы потом доказать банку, что это именно мы делали запрос
-    SESSIONS[state] = verifier
+    # Запоминаем code_verifier, чтобы потом доказать банку, что это именно мы делали запрос
+    SESSIONS[state] = code_verifier
 
     params = urlencode({
         "response_type": "code",
         "client_id": CLIENT_ID,
         "redirect_uri": REDIRECT_URI,
-        "scope": "read write",
+        "scope": "openid read write",
         "state": state,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
@@ -64,8 +67,8 @@ async def oauth_callback(request: Request, code: str = None, state: str = None, 
         return templates.TemplateResponse(request=request, name="index.html", context={"error": error})
 
     # Проверяем state (защита от CSRF) и достаем наш секретный code_verifier
-    verifier = SESSIONS.pop(state, None)
-    if not verifier:
+    code_verifier = SESSIONS.pop(state, None)
+    if not code_verifier:
         return templates.TemplateResponse(
             request=request,
             name="index.html",
@@ -81,7 +84,7 @@ async def oauth_callback(request: Request, code: str = None, state: str = None, 
                 "code": code,
                 "redirect_uri": REDIRECT_URI,
                 "client_id": CLIENT_ID,
-                "code_verifier": verifier,
+                "code_verifier": code_verifier,
             }
         )
 
