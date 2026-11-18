@@ -2,37 +2,28 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Магазин / Клиентское приложение</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: white; padding: 32px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 420px; text-align: center; }
-        h2 { margin-top: 0; color: #1a1a1a; }
-        .btn { display: inline-block; padding: 12px 24px; background: #0066ff; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 15px; }
-        .btn:hover { background: #0052cc; }
-        .token-box { background: #f8f9fa; border: 1px solid #e1e4e8; padding: 12px; border-radius: 6px; text-align: left; font-family: monospace; font-size: 12px; word-break: break-all; margin-top: 15px; }
-        .error { color: #cf1322; background: #fff2f0; padding: 10px; border-radius: 6px; margin-top: 15px; }
-    </style>
+    <title>Банк-клиент (BFF + JS)</title>
 </head>
 <body>
-    <div class="card">
-        <h2>Личный кабинет клиента</h2>
+    <h1>Личный кабинет клиента</h1>
 
-        {% if error %}
-            <div class="error"><b>Ошибка:</b> {{ error }}</div>
-        {% endif %}
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% endif %}
 
-        {% if token_data %}
-            <p style="color: #28a745; font-weight: bold;">Авторизация через Банк ID прошла успешно!</p>
-            <div class="token-box">
-                <b>Access Token:</b> {{ token_data.access_token }}<br><br>
-                <b>Scope (права):</b> {{ token_data.scope }}<br>
-                <b>Expires in:</b> {{ token_data.expires_in }} сек.
-            </div>
-            <a href="/" class="btn" style="background: #6c757d;">Выйти / Начать заново</a>
-        {% else %}
-            <p style="color: #555;">Для доступа к счетам войдите через единый профиль банка.</p>
-            <a href="/login" class="btn">Войти через Банк ID (OAuth 2.1)</a>
-        {% endif %}
-    </div>
+    {% if is_authenticated %}
+        <p>Вы успешно авторизованы! Токен надежно спрятан на сервере.</p>
+        <button id="load-data-btn">Загрузить баланс через JS (API)</button>
+        <pre id="api-output"></pre>
+
+        <form action="/logout" method="post">
+            <button type="submit">Выйти</button>
+        </form>
+    {% else %}
+        <a href="/login"><button>Войти через Банк (OAuth 2.1)</button></a>
+    {% endif %}
+
+    <!-- Подключаем внешний JS-скрипт -->
+    <script src="/static/app.js"></script>
 </body>
 </html>
