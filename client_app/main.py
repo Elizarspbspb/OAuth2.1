@@ -30,6 +30,7 @@ USER_SESSIONS = {}
 
 
 def generate_pkce():
+    print("!!!!!!!! GENERATE_PKCE")
     """Генерируем пару code_verifier и code_challenge (S256) по стандарту OAuth 2.1."""
     verifier = secrets.token_urlsafe(32)
     digest = hashlib.sha256(verifier.encode("ascii")).digest()
@@ -40,6 +41,7 @@ def generate_pkce():
 # Чтобы не писать заголовки каждому маршруту (@app.) ставим 1 раз фильтр на весь сервер
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    print("!!!!!!!! MIDDLEWARE")
     response = await call_next(request)
     # Запрещаем встраивание сайта в iframe (защита от Clickjacking)
     response.headers["X-Frame-Options"] = "DENY"
@@ -56,6 +58,7 @@ async def add_security_headers(request: Request, call_next):
 # Браузер шлет серверу текстовые HTTP-запросы и передаем в объект класса Request
 @app.get("/")
 def home(request: Request):
+    print("!!!!!!!! HOME")
     session_id = request.cookies.get("session_id")
     is_authenticated = session_id in USER_SESSIONS
     # Токены в шаблон НЕ передаем!
@@ -67,6 +70,7 @@ def home(request: Request):
 
 @app.get("/login")
 def start_oauth():
+    print("!!!!!!!! START_OAUTH")
     """Шаг 1: Пользователь нажал кнопку 'Войти'. Готовим PKCE и редиректим в Банк."""
     state = secrets.token_urlsafe(16)
     print("state = ", state)
@@ -103,15 +107,16 @@ def start_oauth():
 
 
 @app.get("/callback")
-async def oauth_callback(request: Request, code: str = None, state: str = None, error: str = None):
-    """Шаг 2: Банк вернул пользователя сюда с одноразовым code."""
+async def oauth_callback(request: Request, authorization_code: str = None, state: str = None, error: str = None):
+    print("!!!!!!!! OAUTH_CALLBACK")
+    """Шаг 2: Банк вернул пользователя сюда с одноразовым authorization_code."""
     if error:
         return templates.TemplateResponse(request=request, name="index.html", context={"error": error})
 
    # 1. Проверяем, что state в URL совпадает с кукой браузера (защита от Login CSRF)
     cookie_state = request.cookies.get("oauth_state")
-    print("state = ", state)
-    print("cookie_state = ", cookie_state)
+    print("state 2 = ", state)
+    print("cookie_state 2 = ", cookie_state)
     if not state or not cookie_state or not secrets.compare_digest(state, cookie_state):
         return templates.TemplateResponse(
             request=request,
@@ -121,27 +126,30 @@ async def oauth_callback(request: Request, code: str = None, state: str = None, 
 
     # 2. Достаем code_verifier и удаляем одноразовый state
     code_verifier = OAUTH_FLOWS.pop(state, None)
+    print("code_verifier 2 = ", code_verifier)
     if not code_verifier:
         return templates.TemplateResponse(
             request=request,
             name="index.html",
             context={"error": "Неверный или устаревший параметр state!"}
         )
-
+    
+    print("authorization_code = ", authorization_code)
     # httpx и await - Асинхронный аналог, чтобы не блокировать весь сервер в ожидание, а точно завершить операцию
-    # 3. Меняем code на токены access_token (сервер-сервер внутри Docker)
+    # 3. Меняем authorization_code на токены access_token (сервер-сервер внутри Docker)
     async with httpx.AsyncClient() as client:
+        print("httpx.AsyncClient()")
         token_resp = await client.post(
             f"{AUTH_INTERNAL_URL}/token",
             data={
                 "grant_type": "authorization_code",
-                "code": code,
+                "authorization_code": authorization_code,
                 "redirect_uri": REDIRECT_URI,
                 "client_id": CLIENT_ID,
                 "code_verifier": code_verifier,
             }
         )
-
+    print("token_resp = ", token_resp)
     if token_resp.status_code != 200:
         return templates.TemplateResponse(
             request=request,
@@ -172,6 +180,7 @@ async def oauth_callback(request: Request, code: str = None, state: str = None, 
 # --- API-эндпоинт, который будет дергать наш JS-скрипт из браузера ---
 @app.get("/api/account-data")
 async def get_account_data(request: Request):
+    print("get_account_data")
     session_id = request.cookies.get("session_id")
     session_data = USER_SESSIONS.get(session_id)
 
@@ -182,6 +191,7 @@ async def get_account_data(request: Request):
 
     # Backend сам идет в Сервер ресурсов (контейнер 4), подставляя токен в заголовок
     async with httpx.AsyncClient() as client:
+        print("httpx.AsyncClient()")
         res = await client.get(
             f"{RESOURCE_INTERNAL_URL}/api/data",  # укажите ваш путь на сервере ресурсов
             headers={"Authorization": f"Bearer {access_token}"}

@@ -18,7 +18,7 @@ class OAuth2Client(Base):
 
 class AuthCode(Base):
     __tablename__ = "oauth2_codes"
-    code = Column(String(100), primary_key=True)
+    authorization_code = Column(String(100), primary_key=True)
     client_id = Column(String(50), nullable=False)
     redirect_uri = Column(String(200), nullable=False)
     user_id = Column(Integer, nullable=False)

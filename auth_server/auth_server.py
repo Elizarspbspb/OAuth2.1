@@ -114,31 +114,34 @@ def authorize_post(
         )
         
     # УЯЗВИМОСТЬ БИЗНЕС-ЛОГИКИ №2: PKCE (code_challenge) не обязателен, а scope не проверяется
-    code = secrets.token_urlsafe(16)
+    authorization_code = secrets.token_urlsafe(16)
+    print("authorization_code = ", authorization_code)
     db.add(AuthCode(
-        code=code, client_id=client_id, redirect_uri=redirect_uri,
+        authorization_code=authorization_code, client_id=client_id, redirect_uri=redirect_uri,
         user_id=user.id, scope=scope, code_challenge=code_challenge
     ))
     db.commit()
     db.close()
 
-    target = f"{redirect_uri}?code={code}" + (f"&state={state}" if state else "")
+    #target = f"{redirect_uri}?code={code}" + (f"&state={state}" if state else "")
+    target = (f"{redirect_uri}?state={state}" if state else "") + f"&authorization_code={authorization_code}"
     return RedirectResponse(url=target, status_code=303)
 
 
 @app.post("/token")
 def issue_token(
     grant_type: str = Form(...),
-    code: str = Form(...),
+    authorization_code: str = Form(...),
     redirect_uri: str = Form(...),
     client_id: str = Form(...),
     code_verifier: Optional[str] = Form(None)
 ):
+    print("ISSUE_TOKEN")
     if grant_type != "authorization_code":
         raise HTTPException(status_code=400, detail="Неверный grant_type")
 
     db = SessionLocal()
-    auth_code = db.query(AuthCode).filter_by(code=code, client_id=client_id).first()
+    auth_code = db.query(AuthCode).filter_by(authorization_code=authorization_code, client_id=client_id).first()
 
     if not auth_code or auth_code.redirect_uri != redirect_uri:
         db.close()

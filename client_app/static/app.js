@@ -1,8 +1,10 @@
+// «Дождись, пока вся HTML-страница полностью прогрузится, и выполни код внутри фигурных скобок»
 document.addEventListener("DOMContentLoaded", () => {
     const loadBtn = document.getElementById("load-data-btn");
     const output = document.getElementById("api-output");
 
     if (loadBtn) {
+        // «Когда пользователь кликнет по этой кнопке, нужно запустить функцию внутри».
         loadBtn.addEventListener("click", async () => {
             output.textContent = "Загрузка данных из банка...";
             try {
