@@ -18,14 +18,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
 
                 if (!response.ok) {
-                    throw new Error(Ошибка HTTP: ${response.status});
+                    //throw new Error(`Ошибка HTTP: ${response.status}`);
+                    throw new Error("Ошибка HTTP: " + response.status);
                 }
 
                 const data = await response.json();
                 // Используем textContent вместо innerHTML для защиты от DOM XSS!
                 output.textContent = JSON.stringify(data, null, 2);
             } catch (err) {
-                output.textContent = Ошибка: ${err.message};
+                //output.textContent = `Ошибка: ${err.message}`;
+                output.textContent = "Ошибка: " + err.message;
             }
         });
     }

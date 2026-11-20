@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import FastAPI, Request, Form, Query, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 import jwt
@@ -52,6 +53,13 @@ def verify_pkce(verifier: str, challenge: str) -> bool:
     encoded = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
     return secrets.compare_digest(encoded, challenge)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8003"], # Разрешаем запросы ТОЛЬКО с нашего SPA! (Никогда не "*")
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 @app.on_event("startup")
 def seed_db():
@@ -61,6 +69,8 @@ def seed_db():
         db.add(User(id=99, username="bob", password_hash=hash_password("456")))
     if not db.query(OAuth2Client).filter_by(client_id="my_client_app").first():
         db.add(OAuth2Client(client_id="my_client_app", redirect_uri="http://localhost:8002/callback"))
+    if not db.query(OAuth2Client).filter_by(client_id="my_spa_client_app").first():
+        db.add(OAuth2Client(client_id="my_spa_client_app", redirect_uri="http://localhost:8003/callback"))
     db.commit()
     db.close()
 

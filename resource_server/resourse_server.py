@@ -1,6 +1,7 @@
 import os
 import httpx
 from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, Float, String
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -54,6 +55,13 @@ async def get_current_user(authorization: str = Header(...)) -> dict:
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Невалидный токен: {str(e)}")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8003"], # Разрешаем запросы ТОЛЬКО с SPA! (Никогда не "*")
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 @app.on_event("startup")
 def seed_accounts():

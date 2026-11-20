@@ -60,7 +60,7 @@ http://localhost:8002.
 1. Откройте терминал в папке OAuth2.1/.
 2. Запустите сборку и старт всех 4 контейнеров:
 ```
-sudo docker-compose up --build
+sudo docker compose up --build
 
 sudo apt install docker-compose-v2
 sudo docker compose up --build
@@ -105,7 +105,7 @@ schemathesis run http://localhost:8001/openapi.json \
 
 20. Остановить контейнеры и удалить старый том БД флагом -v:
 ```
-docker compose down -v
+sudo docker compose down -v
 ```
 
 ## 5. Запустить фаззинг по серверу ресурсов
@@ -125,3 +125,33 @@ schemathesis run http://localhost:8001/openapi.json \
   --workers 5
 ```
 Фаззер сам прочитает `/openapi.json` сервера ресурсов, найдет ручку POST `/transfer`, начнет подставлять туда -100.0, 0, 9999999 в 5 параллельных потоков и через несколько секунд выдаст вам готовый отчет о найденных уязвимостях!
+
+## 6. Клиентское приложение: SPA (Single Page Application)
+Данный сервис представляет собой чистый фронтенд-клиент (Public Client), реализованный по архитектуре SPA без серверного состояния (Backend-less). 
+### Как работает: 
+* Веб-сервер Nginx отдает браузеру пустую HTML-оболочку (index.html) и статический JavaScript-файл (app.js). Вся логика авторизации и отрисовки интерфейса выполняется на стороне браузера.
+### Безопасность (OAuth 2.1 + PKCE):
+  * Генерация code_verifier, code_challenge (SHA-256) и state реализована в браузере через стандартный Web Crypto API (window.crypto).
+  * access_token хранится исключительно в оперативной памяти JS-переменной (не используется localStorage, чтобы снизить риск кражи при XSS).
+  * На уровне Nginx настроены заголовки безопасности: Content-Security-Policy (CSP), X-Frame-Options и X-Content-Type-Options.
+
+### Зависимости и требования
+Для запуска и работы SPA не требуются Node.js, npm или внешние JS-фреймворки:
+* Docker и Docker Compose (V2)
+* Образ: nginx:alpine (устанавливается автоматически при сборке контейнера)
+* Требования к бэкенду: на auth_server и resource_server должен быть настроен CORS для домена SPA (http://localhost:8002), а в списке разрешенных redirect_uri клиента должен быть добавлен http://localhost:8002/callback.
+
+### Запуск
+1. Перейдите в корневую директорию проекта (где расположен docker-compose.yml).
+2. Соберите и запустите контейнер:
+   ```bash
+   sudo docker compose up -d --build
+   ```
+3. Откройте приложение в браузере:
+   ```text
+   http://localhost:8003
+   ```
+4. Остановить контейнеры:
+   ```bash
+   sudo docker compose down -v
+   ```

@@ -23,8 +23,9 @@
         <a href="/login"><button>Войти через Банк (OAuth 2.1)</button></a>
     {% endif %}
 
-    <!-- Подключаем внешний JS-скрипт -->
+    <!-- Подключаем внешний JS-скрипт, можно указать версию, чтобы гарантированно скачать в Браузер Burp -->
     <!-- Браузер автоматически отправляет второй фоновый HTTP-запрос на сервер: GET /static/app.js. -->
+    <!-- <script src="/static/app.js?v=2"></script> -->
     <script src="/static/app.js"></script>
 </body>
 </html>

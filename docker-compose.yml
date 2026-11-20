@@ -29,19 +29,7 @@ services:
       auth_db:
         condition: service_healthy
 
-  # КОНТЕЙНЕР 3: Клиентское ПО
-  client_app:
-    build: ./client_app
-    container_name: client_app
-    ports:
-      - "8002:8002"
-    environment:
-      AUTH_PUBLIC_URL: http://localhost:8000
-      AUTH_INTERNAL_URL: http://auth_server:8000
-    depends_on:
-      - auth_server
-      
-  # КОНТЕЙНЕР 4: Сервер ресурсов (Банк API)
+  # КОНТЕЙНЕР 3: Сервер ресурсов (Банк API)
   resource_server:
     build: ./resource_server
     container_name: resource_server
@@ -53,6 +41,29 @@ services:
     depends_on:
       auth_server:
         condition: service_started
+
+  # КОНТЕЙНЕР 4: Клиентское ПО
+  client_app:
+    build: ./client_app
+    container_name: client_app
+    ports:
+      - "8002:8002"
+    environment:
+      AUTH_PUBLIC_URL: http://localhost:8000
+      AUTH_INTERNAL_URL: http://auth_server:8000
+    depends_on:
+      - auth_server
+      - resource_server
+      
+  # КОНТЕЙНЕР 5: Клиентское SPA
+  spa_client_app:
+    build: ./spa_client_app
+    container_name: spa_client_app
+    ports:
+      - "8003:80"
+    depends_on:
+      - auth_server
+      - resource_server
 
 volumes:
   auth_pg_data:
