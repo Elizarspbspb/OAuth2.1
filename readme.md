@@ -147,6 +147,10 @@ schemathesis run http://localhost:8001/openapi.json \
    ```bash
    sudo docker compose up -d --build
    ```
+   Или
+   ```
+   sudo docker-compose up -d --build
+   ```
 3. Откройте приложение в браузере:
    ```text
    http://localhost:8003
