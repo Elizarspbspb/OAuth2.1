@@ -6,7 +6,8 @@ WORKDIR /app
 
 # Сначала копируем только зависимости и ставим их (это ускорит повторные сборки)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Копируем весь остальной код (auth_server.py, models.py, database.py и папку templates)
 COPY . .
