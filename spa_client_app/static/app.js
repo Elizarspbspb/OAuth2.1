@@ -2,7 +2,7 @@ const CONFIG = {
     authUrl: "http://localhost:8000",
     resourceUrl: "http://localhost:8001",
     clientId: "my_spa_client_app", // Убедись, что клиент в БД разрешен без client_secret (Public Client)!
-    redirectUri: "http://localhost:8003/callback",
+    redirectUri: "http://localhost:8003/callback", 
     scope: "openid read write"
 };
 
@@ -48,7 +48,7 @@ function generateState() {
 async function startLogin() {
     const state = generateState();
     const { verifier, challenge } = await generatePKCE();
-
+    const nonce = generateState();
     // Сохраняем временные данные во вкладке браузера (sessionStorage очистится при закрытии вкладки)
     sessionStorage.setItem("pkce_state", state);
     sessionStorage.setItem("pkce_verifier", verifier);
@@ -59,6 +59,7 @@ async function startLogin() {
         redirect_uri: CONFIG.redirectUri,
         scope: CONFIG.scope,
         state: state,
+        nonce: nonce,
         code_challenge: challenge,
         code_challenge_method: "S256"
     });
@@ -69,7 +70,7 @@ async function startLogin() {
 
 async function handleCallback() {
     const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get("code");
+    const authorization_code = urlParams.get("authorization_code");
     const returnedState = urlParams.get("state");
     const error = urlParams.get("error");
 
@@ -96,7 +97,7 @@ async function handleCallback() {
     // Браузер НАПРЯМУЮ идет на /token (потребует настройки CORS на Сервере авторизации!)
     const body = new URLSearchParams({
         grant_type: "authorization_code",
-        code: code,
+        authorization_code: authorization_code,
         redirect_uri: CONFIG.redirectUri,
         client_id: CONFIG.clientId,
         code_verifier: verifier

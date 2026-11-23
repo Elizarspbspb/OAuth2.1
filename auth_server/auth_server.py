@@ -115,7 +115,7 @@ def authorize_post(
 ):
     db = SessionLocal()
     user = db.query(User).filter_by(username=username).first()
-
+    print("user = ", user)
     if not user or user.password_hash != hash_password(password):
         db.close()
         return templates.TemplateResponse(
@@ -148,17 +148,23 @@ def issue_token(
 ):
     print("ISSUE_TOKEN")
     if grant_type != "authorization_code":
+        print("Неверный grant_type")
         raise HTTPException(status_code=400, detail="Неверный grant_type")
-
+    print("authorization_code = ", authorization_code)
+    print("client_id = ", client_id)
     db = SessionLocal()
     auth_code = db.query(AuthCode).filter_by(authorization_code=authorization_code, client_id=client_id).first()
-
+    print("auth_code = ", auth_code)
+    print("auth_code.redirect_uri = ", auth_code.redirect_uri)
+    print("redirect_uri = ", redirect_uri)
     if not auth_code or auth_code.redirect_uri != redirect_uri:
+        print("Недействительный код авторизации")
         db.close()
         raise HTTPException(status_code=400, detail="Недействительный код авторизации")
 
     if auth_code.code_challenge:
         if not code_verifier or not verify_pkce(code_verifier, auth_code.code_challenge):
+            print("Ошибка проверки PKCE")
             db.close()
             raise HTTPException(status_code=400, detail="Ошибка проверки PKCE")
 

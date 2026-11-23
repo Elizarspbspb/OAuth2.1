@@ -1,4 +1,5 @@
 # 1. Сервер авторизации my_auth_server.py написан на FastAPI 
+`Keycloak` - это open-source сервер авторизации, который очень часто используют для OAuth 2.1 и OpenID Connect. Потренируйтесь правильно настраивать потоки токенов (PKCE, Refresh Token Rotation).
 ## 1.1. Установка зависимостей
 ```
 pip install fastapi uvicorn pyjwt

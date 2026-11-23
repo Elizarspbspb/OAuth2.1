@@ -7,22 +7,23 @@ from sqlalchemy import create_engine, Column, Integer, Float, String
 from sqlalchemy.orm import declarative_base, sessionmaker
 from authlib.jose import jwt, JsonWebKey
 
+from database import engine, SessionLocal, Base
+from models import Account
+
 # Подключаемся ко второй базе данных в том же контейнере Postgres (resource_db)
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://bank_admin:secret_pass@auth_db:5432/resource_db")
+#DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://bank_admin:secret_pass@auth_db:5432/resource_db")
 JWKS_URL = os.getenv("JWKS_URL", "http://auth_server:8000/.well-known/jwks.json")
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
+#engine = create_engine(DATABASE_URL)
+#SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+#Base = declarative_base()
 
 # Таблица счетов пользователей (Ресурсы)
-class Account(Base):
-    __tablename__ = "accounts"
-    user_id = Column(Integer, primary_key=True)
-    owner_name = Column(String(50))
-    balance = Column(Float, default=0.0)
-
+#class Account(Base):
+#    __tablename__ = "accounts"
+#    user_id = Column(Integer, primary_key=True)
+#    owner_name = Column(String(50))
+#    balance = Column(Float, default=0.0)
 
 Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Bank Resource Server (Vulnerable Business Logic)")
@@ -78,9 +79,18 @@ class TransferRequest(BaseModel):
     to_user_id: int
     amount: float
 
+@app.get("/api/data")
+def get_data_user(user: dict = Depends(get_current_user)):
+    print("/api/data")
+    user_id = int(user["sub"])
+    db = SessionLocal()
+    acc = db.query(Account).filter_by(user_id=user_id).first()
+    db.close()
+    if not acc:
+        raise HTTPException(status_code=404, detail="Счет не найден")
+    return {"user_id": acc.user_id, "owner": acc.owner_name, "balance": acc.balance}
 
 # --- УЯЗВИМЫЕ ЭНДПОИНТЫ БИЗНЕС-ЛОГИКИ (Идеально для фаззера!) ---
-
 @app.get("/accounts/{target_user_id}")
 def get_balance(target_user_id: int, user: dict = Depends(get_current_user)):
     """
