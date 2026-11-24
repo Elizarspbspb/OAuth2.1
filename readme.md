@@ -146,7 +146,7 @@ schemathesis run http://localhost:8001/openapi.json \
 1. Перейдите в корневую директорию проекта (где расположен docker-compose.yml).
 2. Соберите и запустите контейнер:
    ```bash
-   sudo docker compose up -d --build
+   sudo docker compose up --build
    ```
    Или
    ```

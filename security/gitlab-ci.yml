@@ -1,0 +1,79 @@
+stages:
+  - test
+  - sast
+  - sca
+  - build
+  - security-test
+  - report
+  - security-gate
+
+python-tests:
+  stage: test
+  image: python:3.12
+  script:
+    - pip install -r requirements.txt
+    - pytest
+
+semgrep:
+  stage: sast
+  image: semgrep/semgrep
+  script:
+    - semgrep --config p/python
+      --config security/SAST/semgrep/custom-rules.yml
+      --json
+      --output semgrep.json
+      .
+  artifacts:
+    when: always
+    paths:
+      - semgrep.json
+
+trivy:
+  stage: sca
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - trivy fs
+      --format json
+      --output trivy.json
+      .
+
+docker-build:
+  stage: build
+  script:
+    - docker build -t ai-sec-platform .
+
+jwt-tests:
+  stage: security-test
+  image: python:3.12
+  script:
+    - pip install pytest
+    - pytest security/jwt/
+
+oauth-tests:
+  stage: security-test
+  image: python:3.12
+  script:
+    - pip install pytest
+    - pytest security/oauth/
+
+normalize:
+  stage: report
+  image: python:3.12
+  needs:
+    - semgrep
+  script:
+    - python security/parsers/normalize.py
+  artifacts:
+    when: always
+    paths:
+      - vulnerabilities.json
+
+security-gate:
+  stage: security-gate
+  image: python:3.12
+  needs:
+    - normalize
+  script:
+    - python security/security_gate.py

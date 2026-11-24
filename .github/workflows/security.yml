@@ -1,0 +1,223 @@
+name: Security Pipeline
+on:
+  push:
+    # branches: [ "**" ]  # Проверяем пуши во все ветки
+    branches: [ "master" ]
+  pull_request:
+    # Проверять пулл реквест перед слиянием
+    types: [opened, synchronize, reopened]
+    # Выбор путей необязательный
+    path:
+      - 'auth_server'
+      # - '...'
+
+jobs:
+  Secrets:
+    name: Secret Detection — ${{ matrix.scanner }}  # Динамическое имя
+    runs-on: ubuntu-latest
+    strategy:
+      # Запрет быстрого завершение оставшихся задач, если упадет предыдущая
+      fail-fast: false
+      # Размножение задач на независимые параллельные задачи
+      matrix:
+        # Запуск параллельных задач
+        scanner: [trufflehog, gitleaks]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Скачиваем историю, чтобы Git мог сравнить коммиты
+
+      - name: TruffleHog
+        if: matrix.scanner == 'trufflehog'
+        uses: trufflesecurity/trufflehog@main
+        with:
+          # event.before содержит хэш до пуша. Мы проверяем изменения от него до текущего HEAD.
+          base: ${{ github.event.before }}
+          head: HEAD
+          extra_args: --results=verified,unknown
+
+      - name: Gitleaks
+        if: matrix.scanner == 'gitleaks'
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+
+  SCA:
+    name: Software Component Analysis — ${{ matrix.sca }}  # Динамическое имя!
+    runs-on: ubuntu-latest
+    strategy:
+      # Запрет быстрого завершение оставшихся задач, если упадет предыдущая
+      fail-fast: false
+      # Размножение задач на независимые параллельные задачи
+      matrix:
+        # Запуск параллельных задач
+        sca: [owasp, trivy]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run OWASP Dependency-Check
+        # if: matrix.sca == 'owasp'
+        # Модуль отключен - false, true - включен
+        if: false
+        uses: dependency-check/Dependency-Check_Action@main
+        id: DependencyCheck
+        with:
+          project: 'AI-SEC-PLATFORM'
+          path: '.'
+          # Выходной формат файла
+          format: 'SARIF,HTML'
+          # --enableRetired - поиск устаревших библиотек JS
+          # --failOnCVSS 3 - пайплайн упадет если CVSS >= 3.0
+          # --enableHighRiskIndex - высокорискованные методы анализа
+          # NVD_API_KEY - ключ качает инфу об уязвимостях
+          args: >
+            --failOnCVSS 3
+            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+
+      - name: Trivy SCA
+        if: matrix.sca == 'trivy'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          scanners: "vuln"
+          format: "json"
+          output: "trivy.json"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH,MEDIUM,LOW"
+
+      - name: Upload Trivy result
+        # Добавить условие, иначе шаг выполнился бы для обоих задач и для owasp и для trivy 
+        if: matrix.sca == 'trivy'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-result
+          path: trivy.json
+
+  SAST:
+    name: SAST — ${{ matrix.sast }}  # Динамическое имя!
+    runs-on: ubuntu-latest
+    strategy:
+      # Запрет быстрого завершение оставшихся задач, если упадет предыдущая
+      fail-fast: false
+      # Размножение задач на независимые параллельные задачи
+      matrix:
+        # Запуск параллельных задач
+        sast: [semgrep-auto, semgrep-my-rules]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.after }}
+          # Скачиваем всю историю коммитов, без самих файлов старых коммитов. Git видит всю цепочку изменений!
+          filter: tree:0
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Cache Semgrep rules
+        if: matrix.sast == 'semgrep-auto'
+        id: semgrep-cache
+        uses: actions/cache@v4
+        with:
+          path: .semgrep-rules
+          key: semgrep-rules-v1
+
+      - name: Download Semgrep rules
+        if: matrix.sast == 'semgrep-auto' && steps.semgrep-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/semgrep/semgrep-rules.git .semgrep-rules
+          rm -rf .semgrep-rules/stats
+          rm .semgrep-rules/LICENSE
+          rm .semgrep-rules/Pip*
+          rm .semgrep-rules/Makefile
+          rm .semgrep-rules/CO*
+          rm .semgrep-rules/metadata*
+          rm .semgrep-rules/README.md
+          rm .semgrep-rules/template*
+          rm .semgrep-rules/SECURITY.md
+          rm .semgrep-rules/.pre-commit-config.yaml
+          rm -rf .semgrep-rules/.git*
+
+        # Список измененных файлов - разделены пробелом для Semgrep
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v45
+        with:
+          base_sha: ${{ github.event.before }}
+          sha: ${{ github.event.after }}
+          diff_relative: true
+          files_separator: " " # Semgrep принимает файлы через пробел
+
+        # Запуск Semgrep только если есть измененные файлы
+      #- name: Run Semgrep Changed Files
+      #  if: matrix.sast == 'semgrep-auto' && steps.changed-files.outputs.any_changed == 'true'
+      #  run: semgrep scan --config .semgrep-rules --json --output semgrep-auto.json ${{ steps.changed-files.outputs.all_changed_files }}
+
+      - name: Run Semgrep All Files
+        run: semgrep scan --config .semgrep-rules --json --output semgrep.json
+        #run: semgrep scan --config .semgrep-rules . --json --output semgrep.json
+
+      - name: Upload Semgrep result
+        if: matrix.sast == 'semgrep-auto'
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-auto-rules-result
+          path: semgrep-auto.json
+
+        # Запуск Semgrep со своими правилами
+      - name: Check My Semgrep Rules Exist
+        if: matrix.sast == 'semgrep-my-rules'
+        id: check-my-rules
+        run: |
+          if [ ! -d "security/SAST/semgrep" ]; then
+            echo "::notice::Semgrep rules directory not found: security/SAST/semgrep Skipping scan for semgrep-my-rules."
+            echo "rules_missing=true" >> $GITHUB_OUTPUT
+            #exit 1
+          else
+            echo "rules_missing=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Semgrep My Rules
+        if: matrix.sast == 'semgrep-my-rules' && steps.check-my-rules.outputs.rules_missing == 'false' && steps.changed-files.outputs.any_changed == 'true'
+        run: semgrep scan --config security/SAST/semgrep --json --output semgrep-my-rules.json ${{ steps.changed-files.outputs.all_changed_files }}
+
+      - name: Create Empty Result If Rules Missing
+        if: matrix.sast == 'semgrep-my-rules' && steps.check-rules.outputs.rules_missing == 'true'
+        run: echo "{\"results\":[],\"errors\":[\"Semgrep rules not found\"]}" > semgrep-my-rules.json
+
+      - name: Upload Semgrep My Rules Result
+        if: matrix.sast == 'semgrep-my-rules'
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-my-rules-result
+          path: semgrep-my-rules.json
+
+
+  SAST_GATE:
+    #needs: [Secrets, SCA]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Download Trivy result
+        uses: actions/download-artifact@v5
+        with:
+          name: trivy-result
+
+      - name: Security gate
+        run: python security/security_gate.py
