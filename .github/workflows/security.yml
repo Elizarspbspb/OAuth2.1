@@ -3,13 +3,13 @@ on:
   push:
     # branches: [ "**" ]  # Проверяем пуши во все ветки
     branches: [ "master" ]
-    path:
+    paths:
       - 'auth_server/**'
   pull_request:
     # Проверять пулл реквест перед слиянием
     types: [opened, synchronize, reopened]
     # Выбор путей необязательный
-    #path:
+    #paths:
       #- 'auth_server'
       # - '...'
 
@@ -168,17 +168,36 @@ jobs:
       #- name: Run Semgrep Changed Files
       #  if: matrix.sast == 'semgrep-auto' && steps.changed-files.outputs.any_changed == 'true'
       #  run: semgrep scan --config .semgrep-rules --json --output semgrep-auto.json ${{ steps.changed-files.outputs.all_changed_files }}
-      - name: Run Semgrep All Files
+      - name: Run Semgrep All Files auth_server
+        id: semgrep_as
         if: matrix.sast == 'semgrep-auto'
-        run: semgrep scan --config .semgrep-rules --json --output semgrep-auto.json
+        continue-on-error: true
+        #run: semgrep scan --config .semgrep-rules --json --output semgrep-auto-as.json auth_server/
+        run: semgrep scan --config .semgrep-rules --severity ERROR --severity CRITICAL --error --json --output semgrep-auto-as.json auth_server/
+
+      - name: Run Semgrep All Files client_app
+        id: semgrep_ca
+        if: matrix.sast == 'semgrep-auto'
+        continue-on-error: true
+        #run: semgrep scan --config .semgrep-rules --json --output semgrep-auto-ca.json client_app/
+        run: semgrep scan --config .semgrep-rules --severity ERROR --severity HIGH --error --json --output semgrep-auto-ca.json client_app/
 
       - name: Upload Semgrep result
-        if: matrix.sast == 'semgrep-auto'
+        if: always() && matrix.sast == 'semgrep-auto'   # always() - выполнить шаг, даже если выше была ошибка и завершение
         uses: actions/upload-artifact@v4
         with:
-          name: semgrep-auto-rules-result
-          path: semgrep-auto.json
-
+          name: semgrep-auto-rules-result-as
+          path: |
+            semgrep-auto-as.json
+            semgrep-auto-ca.json
+      - name: Check for Critical vulnerabilities
+        if: always() && matrix.sast == 'semgrep-auto'
+        run: |
+          if [ "${{ steps.semgrep_as.outcome }}" == "failure" ] || [ "${{ steps.semgrep_ca.outcome }}" == "failure" ]; then
+            echo "Обнаружены критические уязвимости! Подробности в артефактах."
+            exit 1
+          fi
+          
         # Запуск Semgrep со своими правилами
       - name: Check My Semgrep Rules Exist
         if: matrix.sast == 'semgrep-my-rules'
