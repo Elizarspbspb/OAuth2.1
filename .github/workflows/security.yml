@@ -43,7 +43,7 @@ jobs:
         uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+          #GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
 
   SCA:
     name: Software Component Analysis — ${{ matrix.sca }}  # Динамическое имя!
