@@ -173,14 +173,15 @@ jobs:
         if: matrix.sast == 'semgrep-auto'
         continue-on-error: true
         #run: semgrep scan --config .semgrep-rules --json --output semgrep-auto-as.json auth_server/
-        run: semgrep scan --config .semgrep-rules --severity ERROR --severity CRITICAL --error --json --output semgrep-auto-as.json auth_server/
+        #run: semgrep scan --config .semgrep-rules --severity ERROR --severity CRITICAL --error --json --output semgrep-auto-as.json auth_server/   # Ошибка, есть error, warning, info
+        run: semgrep scan --config .semgrep-rules --severity ERROR --error --json --output semgrep-auto-as.json auth_server/
 
       - name: Run Semgrep All Files client_app
         id: semgrep_ca
         if: matrix.sast == 'semgrep-auto'
         continue-on-error: true
         #run: semgrep scan --config .semgrep-rules --json --output semgrep-auto-ca.json client_app/
-        run: semgrep scan --config .semgrep-rules --severity ERROR --severity HIGH --error --json --output semgrep-auto-ca.json client_app/
+        run: semgrep scan --config .semgrep-rules --severity ERROR --severity WARNING --error --json --output semgrep-auto-ca.json client_app/
 
       - name: Upload Semgrep result
         if: always() && matrix.sast == 'semgrep-auto'   # always() - выполнить шаг, даже если выше была ошибка и завершение
