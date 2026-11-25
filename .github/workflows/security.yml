@@ -43,7 +43,7 @@ jobs:
         uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          #GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+          #GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml  # Файл конфигураций своих правил
 
   SCA:
     name: Software Component Analysis — ${{ matrix.sca }}  # Динамическое имя!
@@ -165,10 +165,9 @@ jobs:
       #- name: Run Semgrep Changed Files
       #  if: matrix.sast == 'semgrep-auto' && steps.changed-files.outputs.any_changed == 'true'
       #  run: semgrep scan --config .semgrep-rules --json --output semgrep-auto.json ${{ steps.changed-files.outputs.all_changed_files }}
-
       - name: Run Semgrep All Files
-        run: semgrep scan --config .semgrep-rules --json --output semgrep.json
-        #run: semgrep scan --config .semgrep-rules . --json --output semgrep.json
+        if: matrix.sast == 'semgrep-auto'
+        run: semgrep scan --config .semgrep-rules --json --output semgrep-auto.json
 
       - name: Upload Semgrep result
         if: matrix.sast == 'semgrep-auto'
@@ -207,7 +206,7 @@ jobs:
 
 
   SAST_GATE:
-    #needs: [Secrets, SCA]
+    needs: [Secrets, SCA, SAST]
     runs-on: ubuntu-latest
 
     steps:
