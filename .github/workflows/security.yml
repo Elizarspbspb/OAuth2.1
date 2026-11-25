@@ -3,8 +3,8 @@ on:
   push:
     # branches: [ "**" ]  # Проверяем пуши во все ветки
     branches: [ "master" ]
-    paths:
-      - 'auth_server/**'
+    #paths:
+    #  - 'auth_server/**'
   pull_request:
     # Проверять пулл реквест перед слиянием
     types: [opened, synchronize, reopened]
