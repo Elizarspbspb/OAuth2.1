@@ -3,12 +3,14 @@ on:
   push:
     # branches: [ "**" ]  # Проверяем пуши во все ветки
     branches: [ "master" ]
+    paths:
+      - 'auth_server/**'
   pull_request:
     # Проверять пулл реквест перед слиянием
     types: [opened, synchronize, reopened]
     # Выбор путей необязательный
-    path:
-      - 'auth_server'
+    #paths:
+      #- 'auth_server'
       # - '...'
 
 jobs:
@@ -160,6 +162,7 @@ jobs:
           sha: ${{ github.event.after }}
           diff_relative: true
           files_separator: " " # Semgrep принимает файлы через пробел
+          # files: auth_server/**
 
         # Запуск Semgrep только если есть измененные файлы
       #- name: Run Semgrep Changed Files
