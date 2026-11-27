@@ -201,7 +201,7 @@ jobs:
         if: always() && matrix.sast == 'semgrep-auto'   # always() - выполнить шаг, даже если выше была ошибка и завершение
         uses: actions/upload-artifact@v4
         with:
-          name: semgrep-auto-rules-result-as
+          name: semgrep-auto-rules-result
           path: |
             semgrep-auto-as.json
             semgrep-auto-ca.json
