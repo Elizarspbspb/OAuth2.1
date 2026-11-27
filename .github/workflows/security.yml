@@ -183,6 +183,20 @@ jobs:
         #run: semgrep scan --config .semgrep-rules --json --output semgrep-auto-ca.json client_app/
         run: semgrep scan --config .semgrep-rules --severity ERROR --severity WARNING --error --json --output semgrep-auto-ca.json client_app/
 
+      - name: Run Semgrep All Files resource_server
+        id: semgrep_rs
+        if: matrix.sast == 'semgrep-auto'
+        continue-on-error: true
+        #run: semgrep scan --config .semgrep-rules --json --output semgrep-auto-rs.json resource_server/
+        run: semgrep scan --config .semgrep-rules --severity ERROR --severity WARNING --error --json --output semgrep-auto-rs.json resource_server/
+
+      - name: Run Semgrep All Files spa_client_app
+        id: semgrep_spa
+        if: matrix.sast == 'semgrep-auto'
+        continue-on-error: true
+        #run: semgrep scan --config .semgrep-rules --json --output semgrep-auto-spa.json spa_client_app/
+        run: semgrep scan --config .semgrep-rules --severity ERROR --severity WARNING --error --json --output semgrep-auto-spa.json spa_client_app/
+
       - name: Upload Semgrep result
         if: always() && matrix.sast == 'semgrep-auto'   # always() - выполнить шаг, даже если выше была ошибка и завершение
         uses: actions/upload-artifact@v4
@@ -191,10 +205,12 @@ jobs:
           path: |
             semgrep-auto-as.json
             semgrep-auto-ca.json
+            semgrep-auto-rs.json
+            semgrep-auto-spa.json
       - name: Check for Critical vulnerabilities
         if: always() && matrix.sast == 'semgrep-auto'
         run: |
-          if [ "${{ steps.semgrep_as.outcome }}" == "failure" ] || [ "${{ steps.semgrep_ca.outcome }}" == "failure" ]; then
+          if [ "${{ steps.semgrep_as.outcome }}" == "failure" ] || [ "${{ steps.semgrep_ca.outcome }}" == "failure" ] || [ "${{ steps.semgrep_rs.outcome }}" == "failure" ] || [ "${{ steps.semgrep_spa.outcome }}" == "failure" ]; then
             echo "Обнаружены критические уязвимости! Подробности в артефактах."
             exit 1
           fi
